@@ -1,0 +1,51 @@
+project:
+  name: "simclr-ms-mri"
+  seed: 42
+  output_dir: "/content/drive/MyDrive/masters/simclr-ms-mri/outputs"
+
+data:
+  root_dir: "/content/drive/MyDrive/masters/data"
+  modalities: ["flair", "mprage", "t2", "pd"]
+  target_rater: "mask1"          # Options: "mask1", "mask2", "union", "intersection"
+  patch_size: [64, 64, 64]
+  patches_per_pair_simclr: 16    # Sampled foreground 64^3 patch pairs per visit pair per epoch
+  patches_per_pair_seg: 16       # Sampled lesion-enriched 64^3 patch pairs per visit pair per epoch
+  pos_neg_ratio: 3.0             # Ratio of lesion/change-centered patches to random brain patches
+  max_spatial_jitter: 2          # Max voxel jitter (+/-) between t1 and t2 patches during SimCLR
+  max_time_gap_norm: 4.0         # Normalization divisor for Δt = (t_2 - t_1) / 4.0
+  cache_rate: 1.0                # 1.0 caches all volumes in Colab Pro A100 system RAM (~83 GB)
+  num_workers: 4
+
+backbone:
+  model_name: "resnet18"
+  pretrained: true
+  in_channels: 4
+  unfreeze_layers_phase_b: ["conv1", "bn1", "layer4"]
+
+simclr:
+  batch_size: 64                 # 64 visit-patch pairs (128 3D patches) per batch on A100 40GB
+  epochs: 40
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  temperature: 0.1
+  proj_hidden_dim: 256
+  proj_out_dim: 128
+  lambda_delta_t: 0.25           # Auxiliary Δt regression weight to prevent z_t2 - z_t1 collapse
+  use_amp: true
+  amp_dtype: "bfloat16"
+
+segmentation:
+  batch_size: 32                 # 32 paired 64^3 patches per step on A100
+  epochs: 50
+  lr_decoder: 1.0e-3
+  lr_encoder_finetune: 0.0       # Keep encoder frozen during downstream comparison
+  weight_decay: 1.0e-4
+  decoder_channels: [256, 128, 64, 32]
+  dice_weight: 1.0
+  focal_weight: 1.0
+  change_voxel_weight: 2.0       # Extra focal multiplier on dynamic evolution voxels (M_t2 != M_t1)
+  threshold: 0.5
+  sw_batch_size: 16              # Full-volume sliding window batch size on A100
+  sw_overlap: 0.5
+  use_amp: true
+  amp_dtype: "bfloat16"
